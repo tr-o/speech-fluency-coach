@@ -1,53 +1,55 @@
-import whisper
-import math
+import json
 from collections import defaultdict
-import matplotlib.pyplot as plt
-import japanize_matplotlib  # 日本語表示が必要な場合
 
-# ファイルとモデル
-filename = "data/data1.mp3"
-model = whisper.load_model("base")
-result = model.transcribe(filename)
+# 色パレット（15分まで対応）
+colors = [
+    "#e0f7fa", "#e8f5e9", "#fff9c4", "#f3e5f5", "#e3f2fd",
+    "#ffebee", "#f1f8e9", "#fff3e0", "#fce4ec", "#ede7f6",
+    "#fbe9e7", "#e0f2f1", "#f9fbe7", "#f5f5f5", "#edeef0"
+]
 
-# 全文の表示
-print("📝 文字起こし全文:\n")
-full_text = result["text"]
-print(full_text)
+# JSON読み込み
+with open("data1_transcription.json", "r", encoding="utf-8") as f:
+    result = json.load(f)
 
-# セグメントごとの単語数を1分単位で集計
-minute_bins = defaultdict(int)
-total_words = 0
+segments = result["segments"]
 
-for segment in result["segments"]:
-    start_minute = int(segment["start"] // 60)
-    words = segment["text"].strip().split()
-    word_count = len(words)
-    minute_bins[start_minute] += word_count
-    total_words += word_count
+# セグメントを1分ごとに分類
+minute_segments = defaultdict(list)
+for i, segment in enumerate(segments):
+    minute = int(segment["start"] // 60)
+    minute_segments[minute].append((i + 1, segment["text"].strip()))
 
-# 音声全体の長さ（分）
-total_duration_sec = result["segments"][-1]["end"]
-total_minutes = total_duration_sec / 60
-average_wpm = total_words / total_minutes
+# HTML構築
+html = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Transcription by Minute</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }
+        .minute-block { padding: 10px; margin-bottom: 10px; border-radius: 8px; }
+        .segment { margin-left: 1em; }
+        .minute-title { font-weight: bold; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+<h1>📝 Transcription Segmented by Minute</h1>
+"""
 
-# 結果表示
-print(f"\n🎯 平均WPM（全体）: {average_wpm:.2f}")
-print("📊 各分ごとのWPM:")
-for minute in sorted(minute_bins):
-    print(f"  {minute:02d}分目: {minute_bins[minute]} words")
+for minute in sorted(minute_segments):
+    color = colors[minute % len(colors)]
+    html += f'<div class="minute-block" style="background-color: {color};">\n'
+    html += f'<div class="minute-title">⏱️ Minute {minute:02d}:00 - {minute+1:02d}:00</div>\n'
+    for idx, text in minute_segments[minute]:
+        html += f'<div class="segment">[{idx:03d}] {text}</div>\n'
+    html += '</div>\n'
 
-# グラフ描画
-minutes = sorted(minute_bins.keys())
-wpm_values = [minute_bins[m] for m in minutes]
+html += "</body></html>"
 
-plt.figure(figsize=(10, 5))
-plt.plot(minutes, wpm_values, marker='o', linestyle='-', color='blue', label='WPM')
-plt.axhline(y=average_wpm, color='red', linestyle='--', label=f'平均WPM: {average_wpm:.1f}')
-plt.title("1分ごとの発話速度（WPM）")
-plt.xlabel("分")
-plt.ylabel("単語数（Words per Minute）")
-plt.xticks(minutes)
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
-plt.show()
+# 保存
+with open("transcription_by_minute.html", "w", encoding="utf-8") as f:
+    f.write(html)
+
+print("✅ HTML file saved as 'transcription_by_minute.html'")
